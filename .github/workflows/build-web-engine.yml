@@ -18,7 +18,7 @@ on:
       emsdk_version:
         description: 'Emscripten SDK version'
         required: true
-        default: '3.1.63'
+        default: 'latest'
         type: string
       publish_release:
         description: 'Publish as GitHub Release?'
