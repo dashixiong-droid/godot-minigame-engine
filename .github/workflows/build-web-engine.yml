@@ -173,7 +173,8 @@ jobs:
           cp ../engine-out/release/godot.js engine/godot.js
           cp ../engine-out/release/godot.wasm engine/godot.wasm
 
-          # Compress wasm with brotli
+          # Remove old brotli-compressed wasm from upstream, then recompress
+          rm -f engine/godot.wasm.br
           sudo apt-get install -y brotli
           brotli engine/godot.wasm
 
