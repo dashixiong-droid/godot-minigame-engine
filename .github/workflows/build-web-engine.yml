@@ -61,28 +61,63 @@ jobs:
       - name: Build Godot Web (template_release)
         working-directory: godot-src
         run: |
-          scons platform=web target=template_release \
-            dlink_enabled=yes \
-            exceptions=disabled \
-            -j$(nproc)
+          scons platform=web target=template_release             dlink_enabled=yes             exceptions=disabled             -j$(nproc)
+
+      - name: Save release .web_zip before debug build
+        run: |
+          mkdir -p web-zip-release
+          cp godot-src/bin/.web_zip/* web-zip-release/ 2>/dev/null || true
 
       - name: Build Godot Web (template_debug)
         working-directory: godot-src
         run: |
-          scons platform=web target=template_debug \
-            dlink_enabled=yes \
-            exceptions=disabled \
-            -j$(nproc)
+          scons platform=web target=template_debug             dlink_enabled=yes             exceptions=disabled             -j$(nproc)
 
       - name: Collect engine output
         run: |
-          mkdir -p engine-out
-          cp godot-src/bin/godot.web.template_release.wasm32.js engine-out/ 2>/dev/null || true
-          cp godot-src/bin/godot.web.template_release.wasm32.wasm engine-out/ 2>/dev/null || true
-          cp godot-src/bin/godot.web.template_debug.wasm32.js engine-out/ 2>/dev/null || true
-          cp godot-src/bin/godot.web.template_debug.wasm32.wasm engine-out/ 2>/dev/null || true
-          echo "=== Engine output ==="
-          ls -lh engine-out/
+          mkdir -p engine-out/release engine-out/debug
+
+          echo "=== All files in godot-src/bin/ ==="
+          find godot-src/bin/ -type f | sort
+
+          # Release: from saved .web_zip (before debug build overwrote it)
+          echo "=== Release web_zip files ==="
+          ls -lh web-zip-release/
+          cp web-zip-release/godot.js engine-out/release/godot.js 2>/dev/null || true
+          cp web-zip-release/godot.wasm engine-out/release/godot.wasm 2>/dev/null || true
+          cp web-zip-release/godot.side.wasm engine-out/release/godot.side.wasm 2>/dev/null || true
+
+          # Debug: from current .web_zip (debug build was last)
+          echo "=== Debug web_zip files ==="
+          ls -lh godot-src/bin/.web_zip/
+          cp godot-src/bin/.web_zip/godot.js engine-out/debug/godot.js 2>/dev/null || true
+          cp godot-src/bin/.web_zip/godot.wasm engine-out/debug/godot.wasm 2>/dev/null || true
+          cp godot-src/bin/.web_zip/godot.side.wasm engine-out/debug/godot.side.wasm 2>/dev/null || true
+
+          # Also copy extra web files
+          cp godot-src/bin/.web_zip/godot.audio.position.worklet.js engine-out/ 2>/dev/null || true
+          cp godot-src/bin/.web_zip/godot.audio.worklet.js engine-out/ 2>/dev/null || true
+          cp godot-src/bin/.web_zip/godot.html engine-out/ 2>/dev/null || true
+          cp godot-src/bin/.web_zip/godot.offline.html engine-out/ 2>/dev/null || true
+          cp godot-src/bin/.web_zip/godot.service.worker.js engine-out/ 2>/dev/null || true
+
+          echo "=== Engine output (release) ==="
+          ls -lh engine-out/release/
+          echo "=== Engine output (debug) ==="
+          ls -lh engine-out/debug/
+
+          # Verify critical files
+          MISSING=0
+          for f in engine-out/release/godot.js engine-out/release/godot.wasm engine-out/debug/godot.js engine-out/debug/godot.wasm; do
+            if [ ! -f "$f" ]; then
+              echo "ERROR: Missing $f"
+              MISSING=1
+            fi
+          done
+          if [ "$MISSING" = "1" ]; then
+            echo "FATAL: Critical engine files are missing!"
+            exit 1
+          fi
 
       - name: Upload engine artifacts
         uses: actions/upload-artifact@v4
@@ -131,12 +166,12 @@ jobs:
           echo "=== Original engine ==="
           ls -lh engine/
 
-          echo "=== Custom engine ==="
-          ls -lh ../engine-out/
+          echo "=== Custom engine (release) ==="
+          ls -lh ../engine-out/release/
 
           # Replace with our custom build
-          cp ../engine-out/godot.web.template_release.wasm32.js engine/godot.js
-          cp ../engine-out/godot.web.template_release.wasm32.wasm engine/godot.wasm
+          cp ../engine-out/release/godot.js engine/godot.js
+          cp ../engine-out/release/godot.wasm engine/godot.wasm
 
           # Compress wasm with brotli
           sudo apt-get install -y brotli
@@ -146,13 +181,15 @@ jobs:
           ls -lh engine/
 
           # Repackage as .tpz
-          cd ..
-          cd tpz-work && zip -r ../release/minigame-noeh-${TPZ_VER}.tpz . && cd ..
+          mkdir -p ../release
+          cd .. && cd tpz-work && zip -r ../release/minigame-noeh-${TPZ_VER}.tpz . && cd ..
 
           # Also ship raw engine files for manual replacement
           mkdir -p release/raw
-          cp engine-out/godot.web.template_release.wasm32.js release/raw/godot.js
-          cp engine-out/godot.web.template_release.wasm32.wasm release/raw/godot.wasm
+          cp engine-out/release/godot.js release/raw/godot.js
+          cp engine-out/release/godot.wasm release/raw/godot.wasm
+          cp engine-out/debug/godot.js release/raw/godot.debug.js
+          cp engine-out/debug/godot.wasm release/raw/godot.debug.wasm
 
           echo "=== Release contents ==="
           ls -lhR release/
@@ -163,24 +200,24 @@ jobs:
           tag_name: wechat-noeh-${{ inputs.godot_version }}
           name: WeChat-compatible (no Wasm EH) - Godot ${{ inputs.godot_version }}
           body: |
-            定制编译 Godot Web 引擎，**禁用 Wasm Exception Handling**，兼容微信小游戏运行时。
+            Custom Godot Web engine build with Wasm Exception Handling disabled, compatible with WeChat Mini Game runtime.
 
-            ## 解决的问题
-            微信小游戏 WASM 运行时不支持 Wasm EH，导致报错：
-            `CompileError: Invalid opcode 0x6 (enable with --experimental-wasm-eh)`
+            ## Problem solved
+            WeChat Mini Game WASM runtime does not support Wasm EH, causing:
+            CompileError: Invalid opcode 0x6 (enable with --experimental-wasm-eh)
 
-            ## 编译选项
-            - `exceptions=disabled` — 禁用 Wasm EH 指令
-            - `dlink_enabled=yes` — 保留 GDExtension 支持
+            ## Build options
+            - exceptions=disabled - disable Wasm EH instructions
+            - dlink_enabled=yes - keep GDExtension support
             - Emscripten ${{ inputs.emsdk_version }}
 
-            ## 下载
-            - `minigame-noeh-*.tpz` — 完整模板（可直接替换上游 .tpz）
-            - `raw/` — 单独的 godot.js + godot.wasm（手动替换用）
+            ## Downloads
+            - minigame-noeh-*.tpz - full template (replace upstream .tpz directly)
+            - raw/ - standalone engine files (for manual replacement)
 
-            ## 使用
-            1. 下载 `.tpz` 替换 `addons/godot-minigame/templates/` 中的上游模板
-            2. 或将 `raw/` 中的文件替换导出目录 `engine/` 下的同名文件
+            ## Usage
+            1. Download .tpz and replace the upstream template in addons/godot-minigame/templates/
+            2. Or replace files in the export engine/ directory with raw/ files
           files: |
             release/minigame-noeh-*.tpz
             release/raw/*
