@@ -13,6 +13,8 @@ on:
           - '4.4-stable'
           - '4.4.1-stable'
           - '4.5-stable'
+          - '4.5.1-stable'
+          - '4.5.2-stable'
       emsdk_version:
         description: 'Emscripten SDK version'
         required: true
@@ -111,6 +113,8 @@ jobs:
             4.4-stable)   TPZ_VER="4.4.0"; TPZ_FILE="minigame4.4.0.1.tpz" ;;
             4.4.1-stable) TPZ_VER="4.4.0"; TPZ_FILE="minigame4.4.0.1.tpz" ;;
             4.5-stable)   TPZ_VER="4.5.1"; TPZ_FILE="minigame4.5.1.tpz" ;;
+            4.5.1-stable) TPZ_VER="4.5.1"; TPZ_FILE="minigame4.5.1.tpz" ;;
+            4.5.2-stable) TPZ_VER="4.5.1"; TPZ_FILE="minigame4.5.1.tpz" ;;
             *) echo "Unknown version"; exit 1 ;;
           esac
           echo "TPZ_VER=$TPZ_VER" >> $GITHUB_ENV
